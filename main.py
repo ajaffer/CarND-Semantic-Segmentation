@@ -42,6 +42,29 @@ def load_vgg(sess, vgg_path):
     return vgg_input, keep_prob, vgg_layer3, vgg_layer4, vgg_layer7
 tests.test_load_vgg(load_vgg, tf)
 
+def conv_1x1(inputs,
+             filters):
+    return tf.layers.conv2d(inputs,
+                            filters,
+                            kernel_size=1,
+                            strides=(1, 1),
+                            padding='same',
+                            kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+
+def up_sample(inputs,
+              filters,
+              kernel_size,
+              strides):
+    return tf.layers.conv2d_transpose(inputs,
+                                      filters,
+                                      kernel_size,
+                                      strides,
+                                      padding='same',
+                                      kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+
+def print_info(input):
+    tf.Print(input, [tf.shape(input)], message="Shape of input:", summarize=10, first_n=1)
+
 
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     """
@@ -52,54 +75,33 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :param num_classes: Number of classes to classify
     :return: The Tensor for the last layer of output
     """
-    vgg_layer3_out_scaled = tf.multiply(vgg_layer3_out, 0.0001,
-                                         name='vgg_layer3_out_scaled')
-    vgg_layer4_out_scaled = tf.multiply(vgg_layer4_out, 0.01,
-                                         name='vgg_layer4_out_scaled')
-
-    tf.Print(vgg_layer7_out, [tf.shape(vgg_layer7_out)])
-
-    conv_1x1 = tf.layers.conv2d(vgg_layer7_out,
+    vgg_layer7_out = conv_1x1(vgg_layer7_out, num_classes)
+    vgg_layer7_out = up_sample(vgg_layer7_out,
                                num_classes,
-                               1,
-                               padding='same',
-                               kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+                               4,
+                               (2, 2))
+    print_info(vgg_layer7_out)
 
-    output = tf.layers.conv2d_transpose(conv_1x1,
-                                        num_classes,
-                                        4,
-                                        strides=(2, 2),
-                                        padding='same',
-                                        kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    vgg_layer4_out = conv_1x1(vgg_layer4_out, num_classes)
+    vgg_layer4_out = tf.multiply(vgg_layer4_out, 1e-2)
+    vgg_layer_7_and_4 = tf.add(vgg_layer7_out, vgg_layer4_out)
+    vgg_layer_7_and_4 = up_sample(vgg_layer_7_and_4,
+                                  num_classes,
+                                  4,
+                                  (2, 2))
+    print_info(vgg_layer_7_and_4)
 
-    output = tf.Print(output, [tf.shape(output)], message= "Shape of output:", summarize=10, first_n=1)
+    vgg_layer3_out = conv_1x1(vgg_layer3_out, num_classes)
+    vgg_layer3_out = tf.multiply(vgg_layer3_out, 1e-4)
+    vgg_layer_7_and_4_and_3 = tf.add(vgg_layer3_out, vgg_layer_7_and_4)
+    output = up_sample(vgg_layer_7_and_4_and_3,
+                       num_classes,
+                       16,
+                       (8, 8))
+    print_info(output)
 
-    vgg_layer7_out = tf.Print(vgg_layer7_out, [tf.shape(vgg_layer7_out)], message= "Shape of vgg_layer7_out:", summarize=10, first_n=1)
-    print('it should print vgg_layer7_out')
-
-
-    #
-    #
-    # output = tf.add(output, vgg_layer4_out_scaled)
-    #
-    # output = tf.layers.conv2d_transpose(output,
-    #                                     num_classes,
-    #                                     4,
-    #                                     strides=(2, 2),
-    #                                     padding='same',
-    #                                     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
-    # output = tf.add(output, vgg_layer3_out_scaled)
-    #
-    # output = tf.layers.conv2d_transpose(output,
-    #                                     num_classes,
-    #                                     16,
-    #                                     strides=(8, 8),
-    #                                     padding='same',
-    #                                     kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
-    #
-    # return output
-    return None
-# tests.test_layers(layers)
+    return output
+tests.test_layers(layers)
 
 
 def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
@@ -112,7 +114,7 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
-    # correct_label = tf.reshape(correct_label, (-1, num_classes))
+    correct_label = tf.reshape(correct_label, (-1, num_classes))
 
     cross_entropy_loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits=logits,
@@ -174,9 +176,10 @@ def run():
     # You'll need a GPU with at least 10 teraFLOPS to train on.
     #  https://www.cityscapes-dataset.com/
 
-    # Input and Labels
-    # image_input = tf.placeholder(tf.float32, [None, None, None, 3])
-    correct_label = tf.placeholder(tf.float32, [None, None, None, num_classes])
+    correct_label = tf.placeholder(tf.int32, (None,
+                                                image_shape[0],
+                                                image_shape[1],
+                                                num_classes))
 
 
     with tf.Session() as sess:
@@ -188,22 +191,32 @@ def run():
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
+        vgg_input, keep_prob, vgg_layer3, vgg_layer4, vgg_layer7 = load_vgg(sess, vgg_path)
 
-        # TODO: Build NN using load_vgg, layers, and optimize function
-        vgg_input, keep_prob, vgg_layer3, vgg_layer4, vgg_layer7 = load_vgg(
-            sess, vgg_path)
         output = layers(vgg_layer3, vgg_layer4, vgg_layer7, num_classes)
-        # logits, training_operation, cross_entropy_loss = optimize(output,
-        #                                                           correct_label,
-        #                                                           learning_rate,
-        #                                                           num_classes)
-        #
-        # # TODO: Train NN using the train_nn function
-        # train_nn(sess, epochs, batch_size, get_batches_fn, training_operation,
-        #          cross_entropy_loss, vgg_input,
-        #          correct_label, keep_prob, learning_rate)
-        # # TODO: Save inference data using helper.save_inference_samples
-        # helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, vgg_input)
+
+        logits, training_operation, cross_entropy_loss = optimize(output,
+                                                                  correct_label,
+                                                                  learning_rate,
+                                                                  num_classes)
+        train_nn(sess,
+                 epochs,
+                 batch_size,
+                 get_batches_fn,
+                 training_operation,
+                 cross_entropy_loss,
+                 vgg_input,
+                 correct_label,
+                 keep_prob,
+                 learning_rate)
+
+        helper.save_inference_samples(runs_dir,
+                                      data_dir,
+                                      sess,
+                                      image_shape,
+                                      logits,
+                                      keep_prob,
+                                      vgg_input)
 
         # OPTIONAL: Apply the trained model to a video
 
