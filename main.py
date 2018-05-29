@@ -65,7 +65,6 @@ def up_sample(inputs,
 def print_info(input):
     tf.Print(input, [tf.shape(input)], message="Shape of input:", summarize=10, first_n=1)
 
-
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     """
     Create the layers for a fully convolutional network.  Build skip-layers using the vgg layers.
@@ -78,8 +77,8 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     vgg_layer7_out = conv_1x1(vgg_layer7_out, num_classes)
     vgg_layer7_out = up_sample(vgg_layer7_out,
                                num_classes,
-                               4,
-                               (2, 2))
+                               kernel_size=4,
+                               strides=(2, 2))
     print_info(vgg_layer7_out)
 
     vgg_layer4_out = conv_1x1(vgg_layer4_out, num_classes)
@@ -87,8 +86,8 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     vgg_layer_7_and_4 = tf.add(vgg_layer7_out, vgg_layer4_out)
     vgg_layer_7_and_4 = up_sample(vgg_layer_7_and_4,
                                   num_classes,
-                                  4,
-                                  (2, 2))
+                                  kernel_size=4,
+                                  strides=(2, 2))
     print_info(vgg_layer_7_and_4)
 
     vgg_layer3_out = conv_1x1(vgg_layer3_out, num_classes)
@@ -96,8 +95,8 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     vgg_layer_7_and_4_and_3 = tf.add(vgg_layer3_out, vgg_layer_7_and_4)
     output = up_sample(vgg_layer_7_and_4_and_3,
                        num_classes,
-                       16,
-                       (8, 8))
+                       kernel_size=16,
+                       strides=(8, 8))
     print_info(output)
 
     return output
@@ -116,18 +115,28 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
     correct_label = tf.reshape(correct_label, (-1, num_classes))
 
+    im_softmax = tf.nn.softmax(logits)
+    predictions = im_softmax > 0.5
+    predictions = tf.reshape(predictions, (-1, num_classes))
+
+    # iou, iou_op = tf.metrics.mean_iou(labels=correct_label,
+    #                                   predictions=predictions,
+    #                                   num_classes=num_classes)
+    iou, iou_op = None, None
+
+
     cross_entropy_loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits=logits,
                                                 labels=correct_label))
     optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
     training_operation = optimizer.minimize(cross_entropy_loss)
 
-    return logits, training_operation, cross_entropy_loss
+    return logits, training_operation, cross_entropy_loss, iou, iou_op
 tests.test_optimize(optimize)
 
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
-             correct_label, keep_prob, learning_rate):
+             correct_label, keep_prob, learning_rate, iou, iou_op):
     """
     Train neural network and print out the loss during training.
     :param sess: TF Session
@@ -142,18 +151,31 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
     sess.run(tf.global_variables_initializer())
+    sess.run(tf.local_variables_initializer())
+    if (iou_op is not None):
+        sess.run(iou_op)
+
     print("Training...")
+
     for epoch in range(epochs):
         for image, label in get_batches_fn(batch_size):
             train_feed_dict = {
                 correct_label: label,
-                keep_prob: 1.0,
+                keep_prob: 0.8,
                 learning_rate: 0.001,
                 input_image: image
             }
 
-            loss = sess.run(train_op, feed_dict=train_feed_dict)
-            print("epoch/loss: ", epoch, loss)
+
+            _, loss = sess.run([train_op, cross_entropy_loss],
+                            feed_dict=train_feed_dict)
+            mean_iou = None
+
+            # _, loss, mean_iou = sess.run([train_op, cross_entropy_loss, iou],
+            #                 feed_dict=train_feed_dict)
+
+            print('epoch: [{epoch}] loss: [{loss}]'.format(
+                epoch=epoch, loss=loss))
 tests.test_train_nn(train_nn)
 
 
@@ -181,7 +203,6 @@ def run():
                                                 image_shape[1],
                                                 num_classes))
 
-
     with tf.Session() as sess:
         # Path to vgg model
         vgg_path = os.path.join(data_dir, 'vgg')
@@ -195,7 +216,7 @@ def run():
 
         output = layers(vgg_layer3, vgg_layer4, vgg_layer7, num_classes)
 
-        logits, training_operation, cross_entropy_loss = optimize(output,
+        logits, training_operation, cross_entropy_loss, iou, iou_op = optimize(output,
                                                                   correct_label,
                                                                   learning_rate,
                                                                   num_classes)
@@ -208,7 +229,9 @@ def run():
                  vgg_input,
                  correct_label,
                  keep_prob,
-                 learning_rate)
+                 learning_rate,
+                 iou,
+                 iou_op)
 
         helper.save_inference_samples(runs_dir,
                                       data_dir,
