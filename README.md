@@ -32,6 +32,7 @@ traffic lights etc, but is not ideal for curvy objects like roads, sky, lakes
  
 ##### Fully Convolutional Networs for Semantic Segmentation
 ![alt text](./fcn-8.png "FCN-8")
+[Image source](https://people.eecs.berkeley.edu/~jonlong/long_shelhamer_fcn.pdf)
 
 The architecture is based on the  ["Fully Convolutional Networks for Semantic Segmentation"](https://people.eecs.berkeley.edu/~jonlong/long_shelhamer_fcn.pdf), by Long, 
  Shelhamer, and Darrell, at UC Berkeley. The goal of
@@ -41,6 +42,9 @@ The architecture is based on the  ["Fully Convolutional Networks for Semantic Se
 
 
 ![alt text](./DAG.png "DAG")
+[Image source](https://people.eecs.berkeley.edu/~jonlong/long_shelhamer_fcn.pdf)
+
+
 Fully Convolutional Networks (FCNs) do not have a fully connected layer at the 
 end, 
 instead there are convolutional layers to classify each pixel. As seen in the
