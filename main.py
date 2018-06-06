@@ -73,14 +73,14 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     vgg_layer7_out = conv_1x1(vgg_layer7_out, num_classes)
-    vgg_layer7_out = tf.multiply(vgg_layer7_out, 1e-4)
+    # vgg_layer7_out = tf.multiply(vgg_layer7_out, 1e-4)
     vgg_layer7_out = up_sample(vgg_layer7_out,
                                num_classes,
                                kernel_size=4,
                                strides=(2, 2))
 
     vgg_layer4_out = conv_1x1(vgg_layer4_out, num_classes)
-    vgg_layer4_out = tf.multiply(vgg_layer4_out, 1e-2)
+    # vgg_layer4_out = tf.multiply(vgg_layer4_out, 1e-2)
     vgg_layer_7_and_4 = tf.add(vgg_layer7_out, vgg_layer4_out)
     vgg_layer_7_and_4 = up_sample(vgg_layer_7_and_4,
                                   num_classes,
@@ -141,6 +141,8 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
     print("Training...")
 
+    count = 1
+    acc_loss = 0
     for epoch in range(epochs):
         for image, label in get_batches_fn(batch_size):
             train_feed_dict = {
@@ -152,9 +154,11 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
             _, loss = sess.run([train_op, cross_entropy_loss],
                             feed_dict=train_feed_dict)
-
-            print('epoch: [{epoch}] loss: [{loss}]'.format(
-                epoch=epoch, loss=loss))
+            acc_loss = acc_loss + loss
+            avg_loss = acc_loss / count
+            count = count + 1
+            print('epoch: [{epoch}] avg_loss: [{avg_loss}]'.format(
+                epoch=epoch, avg_loss=avg_loss))
 tests.test_train_nn(train_nn)
 
 
@@ -165,7 +169,7 @@ def run():
     runs_dir = './runs'
 
     batch_size = 10
-    epochs = 20
+    epochs = 50
     learning_rate = tf.placeholder(tf.float32, None)
 
     tests.test_for_kitti_dataset(data_dir)

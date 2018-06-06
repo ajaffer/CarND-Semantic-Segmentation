@@ -57,15 +57,19 @@ For training, I used the following params:
    keep_prob: 0.5
    learning_rate: 0.0001
    batch_size = 10
-   epochs = 20
+   epochs = 50
 
 I used two trials, 
 
-A) Using two classes: 1) Road 2) Everything else
-![alt-text](./runs/one-class/animation-8-fps.gif)
-
-B) Using three classes: 1) Road, 2) opposite road 3) Everything else
+A) Using two classes: 1) Drivable road (Green) 2) Everything else
 ![alt-text](./runs/two-classes/animation-8-fps.gif)
+
+B) Using three classes: 1) Drivable road (Green), 2) Opposing-road (Red) 3) 
+Everything else
+![alt-text](./runs/three-classes/animation-8-fps.gif)
+
+Seen from this graph, on average the model decreases loss over time.
+![alt-text](./AvgLoss.png "Average Loss")
 
 ##### Run
 Run the following command to run the project:
@@ -73,4 +77,5 @@ Run the following command to run the project:
 python main.py
 ``` 
 
-
+##### Summary
+I am able to get good results using two classes and three classes.
