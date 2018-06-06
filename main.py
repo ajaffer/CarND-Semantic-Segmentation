@@ -62,8 +62,6 @@ def up_sample(inputs,
                                       padding='same',
                                       kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-def print_info(input):
-    tf.Print(input, [tf.shape(input)], message="Shape of input:", summarize=10, first_n=1)
 
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     """
@@ -80,7 +78,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                num_classes,
                                kernel_size=4,
                                strides=(2, 2))
-    print_info(vgg_layer7_out)
 
     vgg_layer4_out = conv_1x1(vgg_layer4_out, num_classes)
     vgg_layer4_out = tf.multiply(vgg_layer4_out, 1e-2)
@@ -89,7 +86,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                   num_classes,
                                   kernel_size=4,
                                   strides=(2, 2))
-    print_info(vgg_layer_7_and_4)
 
     vgg_layer3_out = conv_1x1(vgg_layer3_out, num_classes)
     vgg_layer3_out = tf.multiply(vgg_layer3_out, 1e-4)
@@ -98,7 +94,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                        num_classes,
                        kernel_size=16,
                        strides=(8, 8))
-    print_info(output)
 
     return output
 tests.test_layers(layers)
