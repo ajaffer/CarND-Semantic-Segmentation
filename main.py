@@ -75,6 +75,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     vgg_layer7_out = conv_1x1(vgg_layer7_out, num_classes)
+    vgg_layer7_out = tf.multiply(vgg_layer7_out, 1e-4)
     vgg_layer7_out = up_sample(vgg_layer7_out,
                                num_classes,
                                kernel_size=4,
@@ -115,28 +116,18 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
     correct_label = tf.reshape(correct_label, (-1, num_classes))
 
-    im_softmax = tf.nn.softmax(logits)
-    predictions = im_softmax > 0.5
-    predictions = tf.reshape(predictions, (-1, num_classes))
-
-    # iou, iou_op = tf.metrics.mean_iou(labels=correct_label,
-    #                                   predictions=predictions,
-    #                                   num_classes=num_classes)
-    iou, iou_op = None, None
-
-
     cross_entropy_loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits=logits,
                                                 labels=correct_label))
     optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate)
     training_operation = optimizer.minimize(cross_entropy_loss)
 
-    return logits, training_operation, cross_entropy_loss, iou, iou_op
+    return logits, training_operation, cross_entropy_loss
 tests.test_optimize(optimize)
 
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
-             correct_label, keep_prob, learning_rate, iou, iou_op):
+             correct_label, keep_prob, learning_rate):
     """
     Train neural network and print out the loss during training.
     :param sess: TF Session
@@ -152,8 +143,6 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     """
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
-    if (iou_op is not None):
-        sess.run(iou_op)
 
     print("Training...")
 
@@ -161,18 +150,13 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
         for image, label in get_batches_fn(batch_size):
             train_feed_dict = {
                 correct_label: label,
-                keep_prob: 0.8,
-                learning_rate: 0.001,
+                keep_prob: 0.5,
+                learning_rate: 0.0001,
                 input_image: image
             }
 
-
             _, loss = sess.run([train_op, cross_entropy_loss],
                             feed_dict=train_feed_dict)
-            mean_iou = None
-
-            # _, loss, mean_iou = sess.run([train_op, cross_entropy_loss, iou],
-            #                 feed_dict=train_feed_dict)
 
             print('epoch: [{epoch}] loss: [{loss}]'.format(
                 epoch=epoch, loss=loss))
@@ -180,23 +164,19 @@ tests.test_train_nn(train_nn)
 
 
 def run():
-    num_classes = 2
+    num_classes = 3
     image_shape = (160, 576)
     data_dir = './data'
     runs_dir = './runs'
 
     batch_size = 10
-    epochs = 6
+    epochs = 20
     learning_rate = tf.placeholder(tf.float32, None)
 
     tests.test_for_kitti_dataset(data_dir)
 
     # Download pretrained vgg model
     helper.maybe_download_pretrained_vgg(data_dir)
-
-    # OPTIONAL: Train and Inference on the cityscapes dataset instead of the Kitti dataset.
-    # You'll need a GPU with at least 10 teraFLOPS to train on.
-    #  https://www.cityscapes-dataset.com/
 
     correct_label = tf.placeholder(tf.int32, (None,
                                                 image_shape[0],
@@ -209,14 +189,11 @@ def run():
         # Create function to get batches
         get_batches_fn = helper.gen_batch_function(os.path.join(data_dir, 'data_road/training'), image_shape)
 
-        # OPTIONAL: Augment Images for better results
-        #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
-
         vgg_input, keep_prob, vgg_layer3, vgg_layer4, vgg_layer7 = load_vgg(sess, vgg_path)
 
         output = layers(vgg_layer3, vgg_layer4, vgg_layer7, num_classes)
 
-        logits, training_operation, cross_entropy_loss, iou, iou_op = optimize(output,
+        logits, training_operation, cross_entropy_loss = optimize(output,
                                                                   correct_label,
                                                                   learning_rate,
                                                                   num_classes)
@@ -229,9 +206,7 @@ def run():
                  vgg_input,
                  correct_label,
                  keep_prob,
-                 learning_rate,
-                 iou,
-                 iou_op)
+                 learning_rate)
 
         helper.save_inference_samples(runs_dir,
                                       data_dir,
@@ -241,7 +216,6 @@ def run():
                                       keep_prob,
                                       vgg_input)
 
-        # OPTIONAL: Apply the trained model to a video
 
 
 if __name__ == '__main__':

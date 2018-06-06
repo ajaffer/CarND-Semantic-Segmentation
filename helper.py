@@ -76,6 +76,8 @@ def gen_batch_function(data_folder, image_shape):
             re.sub(r'_(lane|road)_', '_', os.path.basename(path)): path
             for path in glob(os.path.join(data_folder, 'gt_image_2', '*_road_*.png'))}
         background_color = np.array([255, 0, 0])
+        other_road_color = np.array([0, 0, 0])
+        road_color = np.array([255, 0, 255])
 
         random.shuffle(image_paths)
         for batch_i in range(0, len(image_paths), batch_size):
@@ -89,14 +91,20 @@ def gen_batch_function(data_folder, image_shape):
 
                 gt_bg = np.all(gt_image == background_color, axis=2)
                 gt_bg = gt_bg.reshape(*gt_bg.shape, 1)
-                gt_image = np.concatenate((gt_bg, np.invert(gt_bg)), axis=2)
+
+                gt_other_road = np.all(gt_image == other_road_color, axis=2)
+                gt_other_road = gt_other_road.reshape(*gt_other_road.shape, 1)
+
+                gt_road = np.all(gt_image == road_color, axis=2)
+                gt_road = gt_road.reshape(*gt_road.shape, 1)
+
+                gt_image = np.concatenate((gt_bg, gt_other_road, gt_road), axis=2)
 
                 images.append(image)
                 gt_images.append(gt_image)
 
             yield np.array(images), np.array(gt_images)
     return get_batches_fn
-
 
 def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape):
     """
@@ -115,12 +123,26 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
         im_softmax = sess.run(
             [tf.nn.softmax(logits)],
             {keep_prob: 1.0, image_pl: [image]})
-        im_softmax = im_softmax[0][:, 1].reshape(image_shape[0], image_shape[1])
-        segmentation = (im_softmax > 0.5).reshape(image_shape[0], image_shape[1], 1)
-        mask = np.dot(segmentation, np.array([[0, 255, 0, 127]]))
-        mask = scipy.misc.toimage(mask, mode="RGBA")
+
+        class_type = np.argmax(im_softmax, axis=2).reshape(image_shape[0],
+                                                           image_shape[1], 1)
+        bk = (class_type == 0)
+        other_road = (class_type == 1)
+        road = (class_type == 2)
+
+        mask_other_road = np.dot(other_road, np.array([[255, 0, 0, 127]]))
+
+        mask_other_road = scipy.misc.toimage(mask_other_road, mode="RGBA")
         street_im = scipy.misc.toimage(image)
-        street_im.paste(mask, box=None, mask=mask)
+        street_im.paste(mask_other_road, box=None,
+                        mask=mask_other_road)
+
+        mask_road = np.dot(road, np.array([[0, 255, 0, 127]]))
+        mask_road = scipy.misc.toimage(mask_road, mode="RGBA")
+
+        street_im.paste(mask_other_road, box=None,
+                        mask=mask_other_road)
+        street_im.paste(mask_road, box=None, mask=mask_road)
 
         yield os.path.basename(image_file), np.array(street_im)
 
